@@ -169,6 +169,22 @@ export async function POST(request: NextRequest) {
     // Extract custom data (handles both nested and flat)
     const customData = extractCustomData(payload);
 
+    // Initialize Supabase client early to log all requests
+    supabase = getSupabaseClient();
+
+    // Log ALL incoming requests for debugging (even before auth check)
+    try {
+      await supabase.from("webhook_log").insert({
+        source: "ghl_debug",
+        contact_id: customData.contact_id || null,
+        payload: payload,
+        processed: false,
+        error: "Pre-auth log for debugging",
+      });
+    } catch (e) {
+      console.log("Debug log failed:", e);
+    }
+
     // Verify webhook secret from body (constant-time compare)
     const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
     const providedSecret = customData.secret || "";
@@ -177,9 +193,6 @@ export async function POST(request: NextRequest) {
       console.log("GHL Webhook: Invalid secret");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    // Initialize Supabase client
-    supabase = getSupabaseClient();
 
     // Extract contact ID from custom data
     const contactId = customData.contact_id || "";
