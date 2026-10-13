@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 
 // Create Supabase client lazily (service role key for webhooks)
 function getSupabaseClient(): SupabaseClient {
@@ -13,60 +14,72 @@ function getSupabaseClient(): SupabaseClient {
   return createClient(url, key);
 }
 
-// GHL Opportunity/Form webhook payload - fields can be at various levels
-// We'll extract what we can and log the full payload for mapping
-interface GHLWebhookPayload {
-  // Contact fields (may be nested or flat)
-  id?: string;
+// GHL Custom Data fields sent via workflow webhook
+interface GHLCustomData {
+  secret?: string;
   contact_id?: string;
-  contactId?: string;
-  contact?: {
-    id?: string;
-    firstName?: string;
-    lastName?: string;
-    name?: string;
-    phone?: string;
-    email?: string;
-    city?: string;
-    source?: string;
-    tags?: string[];
-    customFields?: Array<{ id: string; key: string; value: string }>;
-  };
-
-  // Flat contact fields (sometimes GHL flattens these)
-  first_name?: string;
-  firstName?: string;
-  last_name?: string;
-  lastName?: string;
-  full_name?: string;
-  fullName?: string;
   name?: string;
   phone?: string;
-  email?: string;
   city?: string;
-
-  // Source/UTM fields
   source?: string;
   utm_source?: string;
-  utmSource?: string;
-  utm_medium?: string;
-  utm_campaign?: string;
+  service?: string;
+  opportunity_id?: string;
+  pipeline?: string;
+}
 
-  // Opportunity fields
-  opportunity?: {
-    id?: string;
-    name?: string;
-    monetaryValue?: number;
-    pipelineId?: string;
-    pipelineStageId?: string;
-  };
+// GHL webhook payload - custom data may be nested or flat
+interface GHLWebhookPayload {
+  // Custom data may be nested under customData or at top level
+  customData?: GHLCustomData;
 
-  // Form fields may appear as customFields or custom_fields
-  customFields?: Array<{ id: string; key: string; field_key?: string; value: string }> | Record<string, string>;
-  custom_fields?: Record<string, string>;
+  // Or flat at root level
+  secret?: string;
+  contact_id?: string;
+  name?: string;
+  phone?: string;
+  city?: string;
+  source?: string;
+  utm_source?: string;
+  service?: string;
+  opportunity_id?: string;
+  pipeline?: string;
 
-  // Catch-all for any other fields
+  // Catch-all for any other fields GHL sends
   [key: string]: unknown;
+}
+
+// Constant-time string comparison to prevent timing attacks
+function secureCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    // Still do a comparison to maintain constant time
+    const dummy = Buffer.from(a);
+    timingSafeEqual(dummy, dummy);
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+// Extract custom data, handling both nested and flat structures
+function extractCustomData(payload: GHLWebhookPayload): GHLCustomData {
+  // If customData object exists, use it
+  if (payload.customData && typeof payload.customData === "object") {
+    return payload.customData;
+  }
+
+  // Otherwise, extract from top level
+  return {
+    secret: payload.secret as string | undefined,
+    contact_id: payload.contact_id as string | undefined,
+    name: payload.name as string | undefined,
+    phone: payload.phone as string | undefined,
+    city: payload.city as string | undefined,
+    source: payload.source as string | undefined,
+    utm_source: payload.utm_source as string | undefined,
+    service: payload.service as string | undefined,
+    opportunity_id: payload.opportunity_id as string | undefined,
+    pipeline: payload.pipeline as string | undefined,
+  };
 }
 
 function normalizePhone(phone: string | undefined): string {
@@ -74,50 +87,68 @@ function normalizePhone(phone: string | undefined): string {
   return phone.replace(/\D/g, "");
 }
 
-function extractContactId(payload: GHLWebhookPayload): string {
-  return (
-    payload.contact?.id ||
-    payload.contact_id ||
-    payload.contactId ||
-    payload.id ||
-    ""
-  );
-}
+// Channel mapping per docs/build-plan.md:
+// utm_source=google → Google Ads
+// facebook / instagram / fbclid present → Meta Ads
+// GHL source "LSA" → Local Services Ads
+// GBP call tracking number → Google Business Profile
+// no match → left blank
+function mapToChannel(
+  utmSource: string | undefined,
+  source: string | undefined,
+  channels: Array<{ id: string; name: string }>
+): string | null {
+  // Try utm_source first, then source
+  const sourceToMatch = (utmSource || source || "").toLowerCase();
 
-function extractName(payload: GHLWebhookPayload): string {
-  // Try nested contact first
-  if (payload.contact?.name) return payload.contact.name;
-  if (payload.contact?.firstName || payload.contact?.lastName) {
-    return [payload.contact.firstName, payload.contact.lastName].filter(Boolean).join(" ");
+  if (!sourceToMatch) return null;
+
+  for (const channel of channels) {
+    const channelLower = channel.name.toLowerCase();
+
+    // utm_source=google → Google Ads
+    if (sourceToMatch === "google" && channelLower.includes("google ads")) {
+      return channel.id;
+    }
+    if (sourceToMatch.includes("google") && channelLower.includes("google ads")) {
+      return channel.id;
+    }
+
+    // facebook / instagram / fbclid → Meta Ads
+    if (
+      (sourceToMatch.includes("facebook") ||
+        sourceToMatch.includes("instagram") ||
+        sourceToMatch.includes("fbclid") ||
+        sourceToMatch.includes("meta")) &&
+      channelLower.includes("meta")
+    ) {
+      return channel.id;
+    }
+
+    // LSA → Local Services Ads
+    if (
+      (sourceToMatch === "lsa" || sourceToMatch.includes("local service")) &&
+      channelLower.includes("local service")
+    ) {
+      return channel.id;
+    }
+
+    // GBP → Google Business Profile
+    if (
+      (sourceToMatch.includes("gbp") || sourceToMatch.includes("google business")) &&
+      channelLower.includes("google business")
+    ) {
+      return channel.id;
+    }
+
+    // Referral
+    if (sourceToMatch.includes("referral") && channelLower.includes("referral")) {
+      return channel.id;
+    }
   }
 
-  // Try flat fields
-  if (payload.full_name) return payload.full_name;
-  if (payload.fullName) return payload.fullName;
-  if (payload.name && typeof payload.name === "string") return payload.name;
-
-  const firstName = payload.first_name || payload.firstName || "";
-  const lastName = payload.last_name || payload.lastName || "";
-
-  return [firstName, lastName].filter(Boolean).join(" ") || "";
-}
-
-function extractPhone(payload: GHLWebhookPayload): string {
-  return payload.contact?.phone || payload.phone || "";
-}
-
-function extractCity(payload: GHLWebhookPayload): string {
-  return payload.contact?.city || payload.city || "";
-}
-
-function extractSource(payload: GHLWebhookPayload): string {
-  return (
-    payload.contact?.source ||
-    payload.source ||
-    payload.utm_source ||
-    payload.utmSource ||
-    ""
-  );
+  // No match → leave blank
+  return null;
 }
 
 export async function POST(request: NextRequest) {
@@ -125,17 +156,7 @@ export async function POST(request: NextRequest) {
   let supabase: SupabaseClient | null = null;
 
   try {
-    // Verify webhook secret from query parameter
-    const { searchParams } = new URL(request.url);
-    const secret = searchParams.get("secret");
-    const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
-
-    if (expectedSecret && secret !== expectedSecret) {
-      console.log("GHL Webhook: Invalid secret");
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Parse payload
+    // Parse payload first
     payload = await request.json();
 
     if (!payload) {
@@ -145,11 +166,23 @@ export async function POST(request: NextRequest) {
 
     console.log("GHL Webhook received:", JSON.stringify(payload, null, 2));
 
+    // Extract custom data (handles both nested and flat)
+    const customData = extractCustomData(payload);
+
+    // Verify webhook secret from body (constant-time compare)
+    const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
+    const providedSecret = customData.secret || "";
+
+    if (expectedSecret && !secureCompare(providedSecret, expectedSecret)) {
+      console.log("GHL Webhook: Invalid secret");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     // Initialize Supabase client
     supabase = getSupabaseClient();
 
-    // Extract contact ID
-    const contactId = extractContactId(payload);
+    // Extract contact ID from custom data
+    const contactId = customData.contact_id || "";
 
     // Log the raw payload to webhook_log for field mapping
     const { error: logError } = await supabase.from("webhook_log").insert({
@@ -166,21 +199,24 @@ export async function POST(request: NextRequest) {
 
     // Must have a contact ID
     if (!contactId) {
-      console.log("GHL Webhook: No contact ID in payload");
+      console.log("GHL Webhook: No contact_id in payload");
 
       // Update log to mark as error
       if (supabase) {
         await supabase
           .from("webhook_log")
-          .update({ error: "No contact ID", processed: true })
+          .update({ error: "No contact_id", processed: true })
           .eq("payload", payload);
       }
 
-      return NextResponse.json({
-        success: false,
-        error: "No contact ID",
-        logged: true
-      }, { status: 400 });
+      return NextResponse.json(
+        {
+          success: false,
+          error: "No contact_id",
+          logged: true,
+        },
+        { status: 400 }
+      );
     }
 
     // Get the user (single user system)
@@ -218,56 +254,28 @@ export async function POST(request: NextRequest) {
         success: true,
         message: "Lead already exists - skipped",
         lead_id: existingLead.id,
-        duplicate: true
+        duplicate: true,
       });
     }
 
-    // Extract data
-    const name = extractName(payload);
-    const phone = extractPhone(payload);
+    // Extract data from custom fields
+    const name = customData.name || "";
+    const phone = customData.phone || "";
     const phoneNormalized = normalizePhone(phone);
-    const source = extractSource(payload);
-    const town = extractCity(payload);
+    const town = customData.city || "";
+    const service = customData.service || "";
 
-    // Map GHL source to channel
+    // Get channels for mapping
     const { data: channels } = await supabase
       .from("channels")
       .select("id, name")
       .eq("user_id", userId)
       .eq("active", true);
 
-    let channelId: string | null = null;
-
-    if (channels && source) {
-      const sourceLower = source.toLowerCase();
-
-      const matchedChannel = channels.find((c) => {
-        const channelLower = c.name.toLowerCase();
-        return (
-          sourceLower.includes(channelLower) ||
-          channelLower.includes(sourceLower) ||
-          (sourceLower.includes("facebook") && channelLower.includes("meta")) ||
-          (sourceLower.includes("meta") && channelLower.includes("meta")) ||
-          (sourceLower.includes("google") && channelLower.includes("google")) ||
-          (sourceLower.includes("lsa") && channelLower.includes("local service")) ||
-          (sourceLower.includes("local service") && channelLower.includes("local service")) ||
-          (sourceLower.includes("referral") && channelLower.includes("referral")) ||
-          (sourceLower.includes("gbp") && channelLower.includes("google business"))
-        );
-      });
-
-      if (matchedChannel) {
-        channelId = matchedChannel.id;
-      }
-    }
-
-    // Fallback channel
-    if (!channelId && channels && channels.length > 0) {
-      const fallbackChannel = channels.find(
-        (c) => c.name.toLowerCase().includes("other") || c.name.toLowerCase().includes("ghl")
-      );
-      channelId = fallbackChannel?.id || channels[0].id;
-    }
+    // Map utm_source first, then source to channel (leave blank if no match)
+    const channelId = channels
+      ? mapToChannel(customData.utm_source, customData.source, channels)
+      : null;
 
     // Check for duplicate phone
     let duplicateOf: string | null = null;
@@ -287,9 +295,11 @@ export async function POST(request: NextRequest) {
 
     // Build notes from source/UTM info
     const noteParts: string[] = [];
-    if (source) noteParts.push(`Source: ${source}`);
-    if (payload.utm_campaign) noteParts.push(`Campaign: ${payload.utm_campaign}`);
-    if (payload.utm_medium) noteParts.push(`Medium: ${payload.utm_medium}`);
+    if (customData.utm_source) noteParts.push(`UTM Source: ${customData.utm_source}`);
+    if (customData.source) noteParts.push(`Source: ${customData.source}`);
+    if (customData.pipeline) noteParts.push(`Pipeline: ${customData.pipeline}`);
+    if (customData.opportunity_id) noteParts.push(`Opportunity: ${customData.opportunity_id}`);
+    if (service) noteParts.push(`Service: ${service}`);
 
     // Create the lead
     const { data: newLead, error: insertError } = await supabase
@@ -343,6 +353,7 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Lead created",
       lead_id: newLead.id,
+      channel_matched: channelId ? true : false,
       duplicate_phone: duplicateOf ? true : false,
     });
   } catch (error) {
@@ -351,9 +362,10 @@ export async function POST(request: NextRequest) {
     // Try to log the error
     if (supabase && payload) {
       try {
+        const customData = extractCustomData(payload);
         await supabase.from("webhook_log").insert({
           source: "ghl",
-          contact_id: extractContactId(payload) || null,
+          contact_id: customData.contact_id || null,
           payload: payload,
           processed: true,
           error: error instanceof Error ? error.message : "Unknown error",
@@ -363,10 +375,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
 
@@ -375,6 +384,6 @@ export async function GET() {
   return NextResponse.json({
     status: "ok",
     message: "GHL webhook endpoint",
-    usage: "POST /api/webhooks/ghl?secret=YOUR_SECRET"
+    usage: "POST with secret in body custom data",
   });
 }
