@@ -43,14 +43,25 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Allow auth callback code to pass through (magic link flow)
+  const hasAuthCode = request.nextUrl.searchParams.has("code");
+
   if (
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/auth")
+    !request.nextUrl.pathname.startsWith("/auth") &&
+    !hasAuthCode
   ) {
     // No user, redirect to login
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // If there's an auth code, redirect to the callback handler
+  if (hasAuthCode && !request.nextUrl.pathname.startsWith("/auth")) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
     return NextResponse.redirect(url);
   }
 
