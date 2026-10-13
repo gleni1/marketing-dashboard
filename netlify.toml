@@ -6,7 +6,7 @@
   external_node_modules = ["@opentelemetry/api"]
 
 # NEXT_PUBLIC_* vars are intentionally embedded in client bundle by Next.js
-# The anon key is safe to expose (protected by Supabase RLS policies)
+# These are safe to expose (protected by Supabase RLS policies)
 [build.environment]
   SECRETS_SCAN_OMIT_PATHS = ".env.local.example"
-  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+  SECRETS_SCAN_OMIT_KEYS = "NEXT_PUBLIC_SUPABASE_ANON_KEY,NEXT_PUBLIC_SUPABASE_URL"
