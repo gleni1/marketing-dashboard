@@ -138,6 +138,11 @@ export async function POST(request: NextRequest) {
     // Parse payload
     payload = await request.json();
 
+    if (!payload) {
+      console.log("GHL Webhook: Empty payload");
+      return NextResponse.json({ error: "Empty payload" }, { status: 400 });
+    }
+
     console.log("GHL Webhook received:", JSON.stringify(payload, null, 2));
 
     // Initialize Supabase client
