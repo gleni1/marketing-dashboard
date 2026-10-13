@@ -1,0 +1,10 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  external_node_modules = ["@opentelemetry/api"]
+
+# Exclude example env file from secrets scanning
+[build.environment]
+  SECRETS_SCAN_OMIT_PATHS = ".env.local.example"
