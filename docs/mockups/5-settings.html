@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ace Roofing NJ dashboard settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&amp;family=Public+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F4F2EE}
+a{color:#1A1D21}a:hover{color:#C2410C}
+</style>
+</helmet>
+<div style="min-height: 100vh; background: #F4F2EE; color: #1A1D21; font-family: 'Public Sans', system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+
+<header style="background: #1A1D21; color: #F4F2EE">
+<div style="max-width: 1280px; margin: 0 auto; padding: 16px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+<div style="display: flex; align-items: center; gap: 12px">
+<svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><path d="M3 17 L16 6 L29 17" fill="none" stroke="#F08A4B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M8 15 V26 H24 V15" fill="none" stroke="#F4F2EE" stroke-width="2.4" stroke-linejoin="round"></path></svg>
+<div style="display: flex; flex-direction: column">
+<span style="font-family: Archivo, sans-serif; font-weight: 800; font-size: 18px; letter-spacing: 0.01em">Ace Roofing NJ</span>
+<span style="font-size: 12px; color: #B9BCC1; letter-spacing: 0.08em; text-transform: uppercase">Marketing numbers</span>
+</div>
+</div>
+<nav aria-label="Main" style="display: flex; flex-wrap: wrap; gap: 4px">
+<a href="1-overview.html" style="color: #DADCDF; text-decoration: none; font-weight: 500; padding: 10px 16px; border-radius: 8px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Overview</a>
+<a href="2-leads.html" style="color: #DADCDF; text-decoration: none; font-weight: 500; padding: 10px 16px; border-radius: 8px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Leads</a>
+<a href="3-spend.html" style="color: #DADCDF; text-decoration: none; font-weight: 500; padding: 10px 16px; border-radius: 8px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Spend</a>
+<a href="4-jobs.html" style="color: #DADCDF; text-decoration: none; font-weight: 500; padding: 10px 16px; border-radius: 8px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Jobs</a>
+<a href="5-settings.html" aria-current="page" style="color: #1A1D21; background: #F4F2EE; text-decoration: none; font-weight: 600; padding: 10px 16px; border-radius: 8px; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center">Settings</a>
+</nav>
+</div>
+</header>
+
+<main style="max-width: 1280px; margin: 0 auto; padding: 28px 24px 56px; display: flex; flex-direction: column; gap: 24px">
+
+<div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px">
+<div style="display: flex; flex-direction: column; gap: 4px">
+<h1 style="margin: 0; font-family: Archivo, sans-serif; font-weight: 800; font-size: 34px; letter-spacing: -0.01em">Settings</h1>
+<p style="margin: 0; color: #5A5F66">Set these once. Every dropdown and every red/blue target on the other screens comes from here.</p>
+</div>
+<button type="button" style="font: inherit; font-weight: 600; border: 0; background: #C2410C; color: #FFFFFF; padding: 10px 22px; border-radius: 10px; min-height: 44px; cursor: pointer">Save settings</button>
+</div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+
+<div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+<section aria-labelledby="ch-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="ch-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Channels</h2>
+<span style="font-size: 13px; color: #5A5F66">Used on Leads, Jobs and Spend. Turning one off hides it from dropdowns but keeps its history.</span>
+</div>
+<div style="overflow-x: auto">
+<table style="width: 100%; min-width: 600px; border-collapse: collapse">
+<thead>
+<tr style="text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #5A5F66">
+<th scope="col" style="padding: 10px 12px; border-bottom: 2px solid #1A1D21">Name</th>
+<th scope="col" style="padding: 10px 12px; border-bottom: 2px solid #1A1D21">Spend</th>
+<th scope="col" style="padding: 10px 12px; border-bottom: 2px solid #1A1D21">Active</th>
+</tr>
+</thead>
+<tbody>
+<sc-for list="{{channels}}" as="c" hint-placeholder-count="7">
+<tr style="border-bottom: 1px solid #E2DFD8">
+<td style="padding: 6px 8px"><input type="text" value="{{c.name}}" aria-label="Channel name" style="font: inherit; font-weight: 600; width: 100%; max-width: 280px; box-sizing: border-box; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF; color: #1A1D21"></td>
+<td style="padding: 6px 8px">
+<select aria-label="Spend source for {{c.name}}" defaultValue="{{c.spend}}" style="font: inherit; font-size: 14px; color: #1A1D21; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF"><option>Synced from ad account</option><option>Entered by hand</option><option>No spend</option></select>
+</td>
+<td style="padding: 6px 12px"><label style="display: inline-flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer"><input type="checkbox" checked style="width: 20px; height: 20px; accent-color: #1A1D21"> On</label></td>
+</tr>
+</sc-for>
+</tbody>
+</table>
+</div>
+<button type="button" style="align-self: flex-start; font: inherit; font-weight: 600; border: 1px dashed #A8A398; background: transparent; color: #1A1D21; padding: 10px 16px; border-radius: 8px; min-height: 44px; cursor: pointer">+ Add channel</button>
+</section>
+
+<section aria-labelledby="tg-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="tg-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Targets</h2>
+<span style="font-size: 13px; color: #5A5F66">A number that misses its target turns orange on the Overview and shows up in the alerts.</span>
+</div>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px">
+<sc-for list="{{targets}}" as="t" hint-placeholder-count="7">
+<div style="border-radius: 10px; background: #F4F2EE; padding: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<label for="{{t.id}}" style="display: flex; flex-direction: column; gap: 2px; font-weight: 600">{{t.label}}
+<span style="font-size: 12px; font-weight: 400; color: #5A5F66">{{t.help}}</span>
+</label>
+<div style="display: flex; align-items: center; gap: 6px; flex: none">
+<span style="font-size: 13px; color: #5A5F66">{{t.dir}}</span>
+<input id="{{t.id}}" type="text" inputmode="decimal" value="{{t.value}}" style="font: inherit; font-weight: 600; width: 72px; box-sizing: border-box; text-align: right; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF; color: #1A1D21">
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+
+</div>
+
+<div style="flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 24px">
+
+<section aria-labelledby="sv-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="sv-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Services</h2>
+<span style="font-size: 13px; color: #5A5F66">Avg ticket and margin are split by these</span>
+</div>
+<sc-for list="{{services}}" as="s" hint-placeholder-count="4">
+<input type="text" value="{{s}}" aria-label="Service name" style="font: inherit; width: 100%; box-sizing: border-box; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF; color: #1A1D21">
+</sc-for>
+<button type="button" style="align-self: flex-start; font: inherit; font-weight: 600; border: 1px dashed #A8A398; background: transparent; color: #1A1D21; padding: 10px 16px; border-radius: 8px; min-height: 44px; cursor: pointer">+ Add service</button>
+</section>
+
+<section aria-labelledby="lr-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<h2 id="lr-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Lost reasons</h2>
+<span style="font-size: 13px; color: #5A5F66">Picked when a lead moves to Lost</span>
+</div>
+<sc-for list="{{reasons}}" as="r" hint-placeholder-count="5">
+<input type="text" value="{{r}}" aria-label="Lost reason" style="font: inherit; width: 100%; box-sizing: border-box; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF; color: #1A1D21">
+</sc-for>
+<button type="button" style="align-self: flex-start; font: inherit; font-weight: 600; border: 1px dashed #A8A398; background: transparent; color: #1A1D21; padding: 10px 16px; border-radius: 8px; min-height: 44px; cursor: pointer">+ Add reason</button>
+</section>
+
+<section aria-labelledby="co-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 14px">
+<h2 id="co-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Costs</h2>
+<label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; font-weight: 600">Your hourly rate
+<span style="display: flex; align-items: center; gap: 6px"><span style="color: #5A5F66; font-weight: 400">$</span><input type="text" inputmode="decimal" value="75" style="font: inherit; font-weight: 600; width: 72px; box-sizing: border-box; text-align: right; padding: 10px; min-height: 44px; border: 1px solid #CFCAC0; border-radius: 8px; background: #FFFFFF; color: #1A1D21"><span style="color: #5A5F66; font-weight: 400">/hr</span></span>
+</label>
+<span style="font-size: 13px; color: #5A5F66; margin-top: -6px">Values the time you spend on estimates</span>
+<fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+<legend style="font-weight: 600; padding: 0; margin-bottom: 6px">Shared sales &amp; tool costs</legend>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer"><input type="radio" name="shared" checked style="width: 20px; height: 20px; accent-color: #1A1D21"> Overall CAC only</label>
+<label style="display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer"><input type="radio" name="shared" style="width: 20px; height: 20px; accent-color: #1A1D21"> Split across channels by lead count</label>
+</fieldset>
+</section>
+
+<section aria-labelledby="cn-h" style="background: #FFFFFF; border: 1px solid #E2DFD8; border-radius: 12px; padding: 22px; display: flex; flex-direction: column; gap: 12px">
+<h2 id="cn-h" style="margin: 0; font-family: Archivo, sans-serif; font-weight: 700; font-size: 20px">Connections</h2>
+<sc-for list="{{connections}}" as="k" hint-placeholder-count="4">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid #E2DFD8">
+<div style="display: flex; flex-direction: column">
+<span style="font-weight: 600">{{k.name}}</span>
+<span style="font-size: 13px; color: #5A5F66">{{k.detail}}</span>
+</div>
+<span style="font-size: 13px; font-weight: 600; color: #1D4E89; background: #E3ECF7; padding: 4px 8px; border-radius: 6px; flex: none">Connected</span>
+</div>
+</sc-for>
+</section>
+
+</div>
+</div>
+
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const channels = [
+      { name: 'Google Ads', spend: 'Synced from ad account' },
+      { name: 'Meta Ads', spend: 'Synced from ad account' },
+      { name: 'Local Services Ads', spend: 'Synced from ad account' },
+      { name: 'Referral', spend: 'Entered by hand' },
+      { name: 'Google Business Profile', spend: 'No spend' },
+      { name: 'Repeat customer', spend: 'No spend' },
+      { name: 'Yard signs & truck', spend: 'Entered by hand' }
+    ];
+    const targets = [
+      { id: 't-contact', label: 'Contact rate', help: 'Leads reached', dir: 'at least', value: '90%' },
+      { id: 't-book', label: 'Booking rate', help: 'Contacted → booked', dir: 'at least', value: '50%' },
+      { id: 't-show', label: 'Show rate', help: 'Booked → showed', dir: 'at least', value: '80%' },
+      { id: 't-est', label: 'Estimate rate', help: 'Showed → estimate given', dir: 'at least', value: '85%' },
+      { id: 't-close', label: 'Close rate', help: 'Estimates → sold', dir: 'at least', value: '35%' },
+      { id: 't-junk', label: 'Junk leads', help: 'Per channel', dir: 'under', value: '25%' },
+      { id: 't-mkt', label: 'Marketing % of revenue', help: 'Spend ÷ revenue sold', dir: 'under', value: '8%' },
+      { id: 't-cac', label: 'CAC', help: 'Per job sold', dir: 'under', value: '$1,200' }
+    ];
+    const services = ['Roof replacement', 'Roof repair', 'Gutters', 'Siding'];
+    const reasons = ['Price', 'Went with competitor', 'No decision', 'Insurance denied', 'Other'];
+    const connections = [
+      { name: 'GoHighLevel', detail: 'Imports new leads only · last run 6 min ago' },
+      { name: 'Google Ads', detail: 'Spend synced nightly' },
+      { name: 'Meta Ads', detail: 'Spend synced nightly' },
+      { name: 'Local Services Ads', detail: 'Spend synced nightly' }
+    ];
+    return { channels, targets, services, reasons, connections };
+  }
+}
+</script>
+</body>
+</html>

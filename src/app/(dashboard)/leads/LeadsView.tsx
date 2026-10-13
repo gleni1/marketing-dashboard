@@ -1,0 +1,792 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import type { Lead, Channel, Service, LostReason, LeadStage } from "@/lib/types";
+import {
+  createLead,
+  changeLeadStage,
+  resolveDuplicate,
+  updateLead,
+  deleteLead,
+} from "./actions";
+
+type LeadWithRelations = Lead & {
+  channel: { id: string; name: string } | null;
+  service: { id: string; name: string } | null;
+  lost_reason: { id: string; name: string } | null;
+  jobs: { id: string }[];
+};
+
+interface LeadsViewProps {
+  leads: LeadWithRelations[];
+  channels: Channel[];
+  services: Service[];
+  lostReasons: LostReason[];
+  duplicates: LeadWithRelations[];
+}
+
+const STAGES: { value: LeadStage; label: string }[] = [
+  { value: "new", label: "New" },
+  { value: "contacted", label: "Contacted / Call again" },
+  { value: "call_again", label: "Call again" },
+  { value: "booked", label: "Booked" },
+  { value: "no_show", label: "No show" },
+  { value: "estimate_given", label: "Estimate given" },
+  { value: "follow_up", label: "Follow-up" },
+  { value: "sold", label: "Sold" },
+  { value: "lost", label: "Lost" },
+  { value: "junk", label: "Junk" },
+];
+
+const STAGE_LABELS: Record<LeadStage, string> = {
+  new: "New",
+  contacted: "Contacted / Call again",
+  call_again: "Call again",
+  booked: "Booked",
+  no_show: "No show",
+  estimate_given: "Estimate given",
+  follow_up: "Follow-up",
+  sold: "Sold",
+  lost: "Lost",
+  junk: "Junk",
+};
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+export function LeadsView({
+  leads,
+  channels,
+  services,
+  lostReasons,
+  duplicates,
+}: LeadsViewProps) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [activeStage, setActiveStage] = useState<LeadStage | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterChannel, setFilterChannel] = useState<string>("");
+  const [filterService, setFilterService] = useState<string>("");
+  const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+
+  // Add form state
+  const [formData, setFormData] = useState({
+    name: "",
+    phone: "",
+    town: "",
+    service_id: "",
+    channel_id: "",
+    notes: "",
+  });
+
+  // Stage counts
+  const stageCounts = leads.reduce(
+    (acc, lead) => {
+      acc[lead.stage] = (acc[lead.stage] || 0) + 1;
+      return acc;
+    },
+    {} as Record<LeadStage, number>
+  );
+
+  // Filter leads
+  const filteredLeads = leads.filter((lead) => {
+    if (activeStage !== "all" && lead.stage !== activeStage) return false;
+    if (filterChannel && lead.channel_id !== filterChannel) return false;
+    if (filterService && lead.service_id !== filterService) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchesName = lead.name?.toLowerCase().includes(q);
+      const matchesPhone = lead.phone?.includes(q);
+      const matchesTown = lead.town?.toLowerCase().includes(q);
+      if (!matchesName && !matchesPhone && !matchesTown) return false;
+    }
+    return true;
+  });
+
+  const handleAddLead = () => {
+    startTransition(async () => {
+      const result = await createLead({
+        ...formData,
+        service_id: formData.service_id || null,
+      });
+      if (result.success) {
+        setShowAddForm(false);
+        setFormData({
+          name: "",
+          phone: "",
+          town: "",
+          service_id: "",
+          channel_id: "",
+          notes: "",
+        });
+      }
+    });
+  };
+
+  const handleStageChange = (
+    leadId: string,
+    newStage: LeadStage,
+    lostReasonId?: string
+  ) => {
+    startTransition(async () => {
+      const result = await changeLeadStage(leadId, newStage, lostReasonId);
+      if (result.success && result.showJobForm) {
+        // Redirect to jobs page with lead data pre-filled
+        router.push(`/jobs?from_lead=${leadId}`);
+      }
+    });
+  };
+
+  const handleResolveDuplicate = (
+    leadId: string,
+    action: "merge" | "keep_both"
+  ) => {
+    startTransition(async () => {
+      await resolveDuplicate(leadId, action);
+    });
+  };
+
+  return (
+    <>
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-archivo font-extrabold text-[34px] tracking-tight">
+            Leads
+          </h1>
+          <p className="text-muted">
+            New GHL leads come in automatically; phone and word-of-mouth leads
+            you add here. Every stage change happens on this screen.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2.5 items-center">
+          <button
+            type="button"
+            onClick={() => setShowAddForm(true)}
+            className="bg-accent text-white font-semibold px-5 py-2.5 rounded-lg min-h-[44px] hover:bg-accent/90 transition-colors"
+          >
+            + Add lead
+          </button>
+        </div>
+      </div>
+
+      {/* Add Lead Form */}
+      {showAddForm && (
+        <section className="bg-white border-2 border-ink rounded-xl p-6 flex flex-col gap-4">
+          <div className="flex flex-wrap justify-between items-baseline gap-2">
+            <h2 className="font-archivo font-bold text-xl">Add a lead</h2>
+            <span className="text-sm text-muted">
+              Channel is required, so every lead counts toward the right numbers
+            </span>
+          </div>
+
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3.5">
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Name
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
+                placeholder="Homeowner"
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Phone
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={(e) =>
+                  setFormData({ ...formData, phone: e.target.value })
+                }
+                placeholder="(973) 555-0100"
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Town
+              <input
+                type="text"
+                value={formData.town}
+                onChange={(e) =>
+                  setFormData({ ...formData, town: e.target.value })
+                }
+                placeholder="e.g. Wayne"
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Service
+              <select
+                value={formData.service_id}
+                onChange={(e) =>
+                  setFormData({ ...formData, service_id: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">Choose...</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Channel *
+              <select
+                value={formData.channel_id}
+                onChange={(e) =>
+                  setFormData({ ...formData, channel_id: e.target.value })
+                }
+                required
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">Choose...</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Notes
+              <input
+                type="text"
+                value={formData.notes}
+                onChange={(e) =>
+                  setFormData({ ...formData, notes: e.target.value })
+                }
+                placeholder="How they found you, roof age..."
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              type="button"
+              onClick={handleAddLead}
+              disabled={isPending || !formData.channel_id}
+              className="bg-accent text-white font-semibold px-6 py-2.5 rounded-lg min-h-[44px] hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            >
+              {isPending ? "Saving..." : "Save lead"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddForm(false)}
+              className="text-[#3D4248] px-4 py-2.5 rounded-lg min-h-[44px] hover:bg-ground transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* Duplicate Banner */}
+      {duplicates.map((dup) => (
+        <section
+          key={dup.id}
+          className="bg-below-target-bg border border-[#F3C9A8] rounded-xl px-5 py-3.5 flex flex-wrap items-center justify-between gap-3"
+        >
+          <div className="flex flex-col gap-0.5 text-[#7C2D12]">
+            <span className="font-bold">Possible duplicate</span>
+            <span>
+              {dup.name}, {dup.phone}, created {formatDate(dup.created_at)}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => handleResolveDuplicate(dup.id, "merge")}
+              className="bg-[#7C2D12] text-white font-semibold px-4 py-2.5 rounded-lg min-h-[44px]"
+            >
+              Merge
+            </button>
+            <button
+              type="button"
+              onClick={() => handleResolveDuplicate(dup.id, "keep_both")}
+              className="border border-[#C9A188] text-[#7C2D12] font-semibold px-4 py-2.5 rounded-lg min-h-[44px]"
+            >
+              Keep both
+            </button>
+          </div>
+        </section>
+      ))}
+
+      {/* Leads List */}
+      <section className="bg-white border border-border rounded-xl p-6 flex flex-col gap-4">
+        <div className="flex flex-wrap justify-between items-end gap-3">
+          <h2 className="font-archivo font-bold text-xl">
+            {new Date().toLocaleDateString("en-US", { month: "long" })} leads
+          </h2>
+          <div className="flex flex-wrap gap-2.5 items-end">
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+              Search
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Name, phone or town"
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] w-[200px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+              Channel
+              <select
+                value={filterChannel}
+                onChange={(e) => setFilterChannel(e.target.value)}
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">All channels</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-xs font-semibold text-muted">
+              Service
+              <select
+                value={filterService}
+                onChange={(e) => setFilterService(e.target.value)}
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">All services</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* Stage Tabs */}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by stage">
+          <button
+            type="button"
+            onClick={() => setActiveStage("all")}
+            aria-pressed={activeStage === "all"}
+            className={`text-sm font-medium px-3.5 py-2 rounded-full min-h-[44px] border transition-colors ${
+              activeStage === "all"
+                ? "bg-ink text-white border-ink font-semibold"
+                : "bg-white text-ink border-[#DCD8D0] hover:border-ink"
+            }`}
+          >
+            All · {leads.length}
+          </button>
+          {STAGES.filter(s => s.value !== "call_again").map((stage) => (
+            <button
+              key={stage.value}
+              type="button"
+              onClick={() => setActiveStage(stage.value)}
+              aria-pressed={activeStage === stage.value}
+              className={`text-sm font-medium px-3.5 py-2 rounded-full min-h-[44px] border transition-colors ${
+                activeStage === stage.value
+                  ? "bg-ink text-white border-ink font-semibold"
+                  : "bg-white text-ink border-[#DCD8D0] hover:border-ink"
+              }`}
+            >
+              {stage.label} · {stageCounts[stage.value] || 0}
+            </button>
+          ))}
+        </div>
+
+        {/* Leads Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1120px] border-collapse">
+            <thead>
+              <tr className="text-left text-xs uppercase tracking-wider text-muted">
+                <th className="px-3 py-2.5 border-b-2 border-ink">Created</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">Lead</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">Town</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">Service</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">Channel</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">Stage</th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">
+                  Next step / reason
+                </th>
+                <th className="px-3 py-2.5 border-b-2 border-ink">
+                  <span className="sr-only">Edit</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredLeads.map((lead) => (
+                <LeadRow
+                  key={lead.id}
+                  lead={lead}
+                  lostReasons={lostReasons}
+                  onStageChange={handleStageChange}
+                  isEditing={editingLeadId === lead.id}
+                  onEdit={() => setEditingLeadId(lead.id)}
+                  onCancelEdit={() => setEditingLeadId(null)}
+                  channels={channels}
+                  services={services}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredLeads.length === 0 && (
+          <p className="text-center text-muted py-8">
+            No leads found. Add your first lead to get started.
+          </p>
+        )}
+      </section>
+
+      {/* Info Cards */}
+      <section className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-3.5">
+        <div className="bg-white border border-border rounded-xl p-4 flex flex-col gap-1.5">
+          <span className="font-bold">Your edits win</span>
+          <span className="text-muted text-sm">
+            GHL only creates new leads. A field you change is never overwritten,
+            and shows &quot;edited&quot;.
+          </span>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-4 flex flex-col gap-1.5">
+          <span className="font-bold">Sold opens the job form</span>
+          <span className="text-muted text-sm">
+            Customer, town, service and channel carry over to Jobs. You only add
+            the amount.
+          </span>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-4 flex flex-col gap-1.5">
+          <span className="font-bold">Lost needs a reason</span>
+          <span className="text-muted text-sm">
+            So you can see whether you lose on price, trust or timing.
+          </span>
+        </div>
+        <div className="bg-white border border-border rounded-xl p-4 flex flex-col gap-1.5">
+          <span className="font-bold">Junk stays out</span>
+          <span className="text-muted text-sm">
+            Junk leads count toward a channel&apos;s junk %, never against your
+            close rate.
+          </span>
+        </div>
+      </section>
+    </>
+  );
+}
+
+// Lead Row Component
+function LeadRow({
+  lead,
+  lostReasons,
+  onStageChange,
+  isEditing,
+  onEdit,
+  onCancelEdit,
+  channels,
+  services,
+}: {
+  lead: LeadWithRelations;
+  lostReasons: LostReason[];
+  onStageChange: (
+    leadId: string,
+    newStage: LeadStage,
+    lostReasonId?: string
+  ) => void;
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancelEdit: () => void;
+  channels: Channel[];
+  services: Service[];
+}) {
+  const [isPending, startTransition] = useTransition();
+  const [selectedStage, setSelectedStage] = useState<LeadStage>(lead.stage);
+  const [selectedLostReason, setSelectedLostReason] = useState<string>(
+    lead.lost_reason_id || ""
+  );
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: lead.name || "",
+    phone: lead.phone || "",
+    town: lead.town || "",
+    service_id: lead.service_id || "",
+    channel_id: lead.channel_id || "",
+    referrer_name: lead.referrer_name || "",
+    next_step: lead.next_step || "",
+    notes: lead.notes || "",
+  });
+
+  const handleStageSelect = (newStage: LeadStage) => {
+    setSelectedStage(newStage);
+    if (newStage === "lost") {
+      // Don't submit yet, wait for lost reason
+      return;
+    }
+    onStageChange(lead.id, newStage);
+  };
+
+  const handleLostReasonSelect = (reasonId: string) => {
+    setSelectedLostReason(reasonId);
+    onStageChange(lead.id, "lost", reasonId);
+  };
+
+  const handleSaveEdit = () => {
+    startTransition(async () => {
+      await updateLead(lead.id, editForm);
+      onCancelEdit();
+    });
+  };
+
+  const handleDelete = () => {
+    startTransition(async () => {
+      await deleteLead(lead.id);
+      setShowDeleteConfirm(false);
+      onCancelEdit();
+    });
+  };
+
+  const hasSoldJob = lead.jobs && lead.jobs.length > 0;
+
+  if (isEditing) {
+    return (
+      <tr className="border-b border-border bg-ground">
+        <td colSpan={8} className="p-4">
+          <div className="flex justify-between items-center mb-3">
+            <span className="font-semibold">Editing lead</span>
+            <button
+              type="button"
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-sm font-semibold text-below-target hover:underline min-h-[44px] px-3"
+            >
+              Delete lead
+            </button>
+          </div>
+
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3 mb-3">
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Name
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, name: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Phone
+              <input
+                type="tel"
+                value={editForm.phone}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, phone: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Town
+              <input
+                type="text"
+                value={editForm.town}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, town: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Service
+              <select
+                value={editForm.service_id}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, service_id: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">Choose...</option>
+                {services.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Channel
+              <select
+                value={editForm.channel_id}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, channel_id: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              >
+                <option value="">Choose...</option>
+                {channels.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Next step
+              <input
+                type="text"
+                value={editForm.next_step}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, next_step: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+          </div>
+
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={handleSaveEdit}
+              disabled={isPending}
+              className="bg-accent text-white font-semibold px-4 py-2 rounded-lg min-h-[44px]"
+            >
+              {isPending ? "Saving..." : "Save"}
+            </button>
+            <button
+              type="button"
+              onClick={onCancelEdit}
+              className="text-[#3D4248] px-4 py-2 rounded-lg min-h-[44px]"
+            >
+              Cancel
+            </button>
+          </div>
+
+          {/* Delete confirmation */}
+          {showDeleteConfirm && (
+            <div className="bg-below-target-bg border border-[#F3C9A8] rounded-lg p-4 flex flex-wrap items-center justify-between gap-3">
+              <span className="text-[#7C2D12] font-semibold">
+                Are you sure you want to delete this lead? This cannot be undone.
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={isPending}
+                  className="bg-below-target text-white font-semibold px-4 py-2 rounded-lg min-h-[44px] hover:bg-below-target/90 disabled:opacity-50 transition-colors"
+                >
+                  {isPending ? "Deleting..." : "Yes, delete"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="border border-[#F3C9A8] bg-white font-semibold px-4 py-2 rounded-lg min-h-[44px] hover:bg-ground transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="border-b border-border align-top">
+      <td className="px-3 py-3 whitespace-nowrap">
+        <span className="block">{formatDate(lead.created_at)}</span>
+        <span className="inline-block mt-1 text-xs font-semibold text-[#3D4248] bg-ground border border-[#DCD8D0] px-1.5 py-0.5 rounded">
+          {lead.origin === "ghl" ? "GHL" : "Manual"}
+        </span>
+      </td>
+      <td className="px-3 py-3 text-left font-semibold">
+        <span className="block">{lead.name || "—"}</span>
+        <span className="block text-sm font-normal text-muted tabular-nums">
+          {lead.phone || "—"}
+        </span>
+      </td>
+      <td className="px-3 py-3">
+        <span>{lead.town || "—"}</span>
+        {lead.edited_fields?.includes("town") && (
+          <span className="block text-xs font-semibold text-on-target">
+            edited
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <span>{lead.service?.name || "—"}</span>
+        {lead.edited_fields?.includes("service_id") && (
+          <span className="block text-xs font-semibold text-on-target">
+            edited
+          </span>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <span className="block">{lead.channel?.name || "—"}</span>
+        {lead.referrer_name && (
+          <span className="block text-sm text-muted">
+            by {lead.referrer_name}
+          </span>
+        )}
+      </td>
+      <td className="px-2 py-1.5">
+        <select
+          value={selectedStage}
+          onChange={(e) => handleStageSelect(e.target.value as LeadStage)}
+          aria-label={`Stage for ${lead.name}`}
+          className="text-sm font-semibold text-ink px-2.5 py-2.5 min-h-[44px] w-[170px] border border-border-dark rounded-lg bg-white"
+        >
+          {STAGES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-3 py-3">
+        {lead.stage === "lost" && (
+          <label className="flex flex-col gap-1 text-xs font-semibold text-below-target">
+            Lost reason (required)
+            <select
+              value={selectedLostReason}
+              onChange={(e) => handleLostReasonSelect(e.target.value)}
+              className="font-normal text-sm text-ink px-2 py-2 min-h-[44px] border border-border-dark rounded-lg bg-white"
+            >
+              <option value="">Choose...</option>
+              {lostReasons.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {lead.stage === "sold" && hasSoldJob && (
+          <a
+            href="/jobs"
+            className="font-semibold inline-flex items-center min-h-[44px] text-accent hover:underline"
+          >
+            Job added · view
+          </a>
+        )}
+        {lead.stage !== "lost" && lead.stage !== "sold" && (
+          <span className="text-[#3D4248]">{lead.next_step || "—"}</span>
+        )}
+      </td>
+      <td className="px-3 py-3">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-sm font-semibold text-ink hover:text-accent inline-flex items-center min-h-[44px]"
+        >
+          Edit
+        </button>
+      </td>
+    </tr>
+  );
+}
