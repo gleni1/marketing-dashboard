@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
 
     // Verify webhook secret from body (constant-time compare)
     // TEMPORARILY DISABLED FOR TESTING - re-enable after confirming connection works
-    const expectedSecret = process.env.GHL_WEBHOOK_SECRET;
+    const expectedSecret = process.env.GHL_WEBHOOK_SECRET || "";
     const providedSecret = customData.secret || "";
 
     if (false && expectedSecret && !secureCompare(providedSecret, expectedSecret)) {
