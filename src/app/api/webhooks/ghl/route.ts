@@ -2,6 +2,9 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
 
+// Force Node.js runtime instead of Edge (required for crypto.timingSafeEqual)
+export const runtime = "nodejs";
+
 // Create Supabase client lazily (service role key for webhooks)
 function getSupabaseClient(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
