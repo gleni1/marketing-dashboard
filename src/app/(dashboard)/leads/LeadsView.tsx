@@ -73,7 +73,8 @@ export function LeadsView({
   const [filterService, setFilterService] = useState<string>("");
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
 
-  // Add form state
+  // Add form state - default date to today
+  const today = new Date().toISOString().split("T")[0];
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -81,6 +82,7 @@ export function LeadsView({
     service_id: "",
     channel_id: "",
     notes: "",
+    created_at: today,
   });
 
   // Stage counts
@@ -112,6 +114,7 @@ export function LeadsView({
       const result = await createLead({
         ...formData,
         service_id: formData.service_id || null,
+        created_at: formData.created_at ? new Date(formData.created_at).toISOString() : undefined,
       });
       if (result.success) {
         setShowAddForm(false);
@@ -122,6 +125,7 @@ export function LeadsView({
           service_id: "",
           channel_id: "",
           notes: "",
+          created_at: today,
         });
       }
     });
@@ -255,6 +259,17 @@ export function LeadsView({
                   </option>
                 ))}
               </select>
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Date received
+              <input
+                type="date"
+                value={formData.created_at}
+                onChange={(e) =>
+                  setFormData({ ...formData, created_at: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
             </label>
             <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
               Notes

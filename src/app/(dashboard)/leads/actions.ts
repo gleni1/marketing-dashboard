@@ -15,6 +15,7 @@ export async function createLead(formData: {
   service_id: string | null;
   channel_id: string;
   notes: string;
+  created_at?: string; // Optional custom date (ISO string)
 }) {
   const supabase = await createClient();
   const {
@@ -47,21 +48,28 @@ export async function createLead(formData: {
   }
 
   // Insert lead
+  const insertData: Record<string, unknown> = {
+    user_id: user.id,
+    name: formData.name || null,
+    phone: formData.phone || null,
+    phone_normalized: phone_normalized || null,
+    town: formData.town || null,
+    service_id: formData.service_id || null,
+    channel_id: formData.channel_id,
+    notes: formData.notes || null,
+    stage: "new" as LeadStage,
+    origin: "manual",
+    duplicate_of,
+  };
+
+  // Allow custom date for manual entries (referrals, yard signs, etc.)
+  if (formData.created_at) {
+    insertData.created_at = formData.created_at;
+  }
+
   const { data: lead, error } = await supabase
     .from("leads")
-    .insert({
-      user_id: user.id,
-      name: formData.name || null,
-      phone: formData.phone || null,
-      phone_normalized: phone_normalized || null,
-      town: formData.town || null,
-      service_id: formData.service_id || null,
-      channel_id: formData.channel_id,
-      notes: formData.notes || null,
-      stage: "new" as LeadStage,
-      origin: "manual",
-      duplicate_of,
-    })
+    .insert(insertData)
     .select()
     .single();
 
