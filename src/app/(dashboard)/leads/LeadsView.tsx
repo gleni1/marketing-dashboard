@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useOptimistic } from "react";
 import { useRouter } from "next/navigation";
 import type { Lead, Channel, Service, LostReason, LeadStage } from "@/lib/types";
 import {
@@ -57,6 +57,13 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+// Action types for optimistic updates
+type OptimisticAction =
+  | { type: "update_stage"; leadId: string; stage: LeadStage; lostReasonId?: string }
+  | { type: "update_lead"; leadId: string; data: Partial<LeadWithRelations> }
+  | { type: "delete_lead"; leadId: string }
+  | { type: "add_lead"; lead: LeadWithRelations };
+
 export function LeadsView({
   leads,
   channels,
@@ -73,6 +80,31 @@ export function LeadsView({
   const [filterService, setFilterService] = useState<string>("");
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
 
+  // Optimistic state for instant UI updates
+  const [optimisticLeads, updateOptimisticLeads] = useOptimistic(
+    leads,
+    (state: LeadWithRelations[], action: OptimisticAction) => {
+      switch (action.type) {
+        case "update_stage":
+          return state.map((lead) =>
+            lead.id === action.leadId
+              ? { ...lead, stage: action.stage, lost_reason_id: action.lostReasonId || null }
+              : lead
+          );
+        case "update_lead":
+          return state.map((lead) =>
+            lead.id === action.leadId ? { ...lead, ...action.data } : lead
+          );
+        case "delete_lead":
+          return state.filter((lead) => lead.id !== action.leadId);
+        case "add_lead":
+          return [action.lead, ...state];
+        default:
+          return state;
+      }
+    }
+  );
+
   // Add form state - default date to today
   const today = new Date().toISOString().split("T")[0];
   const [formData, setFormData] = useState({
@@ -85,8 +117,8 @@ export function LeadsView({
     created_at: today,
   });
 
-  // Stage counts
-  const stageCounts = leads.reduce(
+  // Stage counts (use optimistic leads for instant feedback)
+  const stageCounts = optimisticLeads.reduce(
     (acc, lead) => {
       acc[lead.stage] = (acc[lead.stage] || 0) + 1;
       return acc;
@@ -94,8 +126,8 @@ export function LeadsView({
     {} as Record<LeadStage, number>
   );
 
-  // Filter leads
-  const filteredLeads = leads.filter((lead) => {
+  // Filter leads (use optimistic leads)
+  const filteredLeads = optimisticLeads.filter((lead) => {
     if (activeStage !== "all" && lead.stage !== activeStage) return false;
     if (filterChannel && lead.channel_id !== filterChannel) return false;
     if (filterService && lead.service_id !== filterService) return false;
@@ -110,24 +142,54 @@ export function LeadsView({
   });
 
   const handleAddLead = () => {
+    // Create optimistic lead for instant UI update
+    const now = new Date().toISOString();
+    const optimisticLead: LeadWithRelations = {
+      id: `temp-${Date.now()}`,
+      user_id: "",
+      created_at: formData.created_at ? new Date(formData.created_at).toISOString() : now,
+      updated_at: now,
+      origin: "manual",
+      ghl_contact_id: null,
+      name: formData.name || null,
+      phone: formData.phone || null,
+      phone_normalized: formData.phone?.replace(/\D/g, "") || null,
+      town: formData.town || null,
+      service_id: formData.service_id || null,
+      channel_id: formData.channel_id,
+      referrer_name: null,
+      stage: "new",
+      next_step: null,
+      lost_reason_id: null,
+      notes: formData.notes || null,
+      edited_fields: [],
+      duplicate_of: null,
+      channel: channels.find((c) => c.id === formData.channel_id) || null,
+      service: services.find((s) => s.id === formData.service_id) || null,
+      lost_reason: null,
+      jobs: [],
+    };
+
+    // Update UI immediately
+    updateOptimisticLeads({ type: "add_lead", lead: optimisticLead });
+    setShowAddForm(false);
+    setFormData({
+      name: "",
+      phone: "",
+      town: "",
+      service_id: "",
+      channel_id: "",
+      notes: "",
+      created_at: today,
+    });
+
+    // Then sync with server
     startTransition(async () => {
-      const result = await createLead({
+      await createLead({
         ...formData,
         service_id: formData.service_id || null,
         created_at: formData.created_at ? new Date(formData.created_at).toISOString() : undefined,
       });
-      if (result.success) {
-        setShowAddForm(false);
-        setFormData({
-          name: "",
-          phone: "",
-          town: "",
-          service_id: "",
-          channel_id: "",
-          notes: "",
-          created_at: today,
-        });
-      }
     });
   };
 
@@ -136,10 +198,13 @@ export function LeadsView({
     newStage: LeadStage,
     lostReasonId?: string
   ) => {
+    // Update UI immediately
+    updateOptimisticLeads({ type: "update_stage", leadId, stage: newStage, lostReasonId });
+
+    // Then sync with server
     startTransition(async () => {
       const result = await changeLeadStage(leadId, newStage, lostReasonId);
       if (result.success && result.showJobForm) {
-        // Redirect to jobs page with lead data pre-filled
         router.push(`/jobs?from_lead=${leadId}`);
       }
     });
@@ -398,7 +463,7 @@ export function LeadsView({
                 : "bg-white text-ink border-[#DCD8D0] hover:border-ink"
             }`}
           >
-            All · {leads.length}
+            All · {optimisticLeads.length}
           </button>
           {STAGES.filter(s => s.value !== "call_again").map((stage) => (
             <button
@@ -448,6 +513,7 @@ export function LeadsView({
                   onCancelEdit={() => setEditingLeadId(null)}
                   channels={channels}
                   services={services}
+                  onOptimisticUpdate={updateOptimisticLeads}
                 />
               ))}
             </tbody>
@@ -505,6 +571,7 @@ function LeadRow({
   onCancelEdit,
   channels,
   services,
+  onOptimisticUpdate,
 }: {
   lead: LeadWithRelations;
   lostReasons: LostReason[];
@@ -518,6 +585,7 @@ function LeadRow({
   onCancelEdit: () => void;
   channels: Channel[];
   services: Service[];
+  onOptimisticUpdate: (action: OptimisticAction) => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [selectedStage, setSelectedStage] = useState<LeadStage>(lead.stage);
@@ -551,17 +619,40 @@ function LeadRow({
   };
 
   const handleSaveEdit = () => {
+    // Update UI immediately
+    onOptimisticUpdate({
+      type: "update_lead",
+      leadId: lead.id,
+      data: {
+        name: editForm.name || null,
+        phone: editForm.phone || null,
+        town: editForm.town || null,
+        service_id: editForm.service_id || null,
+        channel_id: editForm.channel_id || lead.channel_id,
+        service: services.find((s) => s.id === editForm.service_id) || null,
+        channel: channels.find((c) => c.id === editForm.channel_id) || lead.channel,
+        referrer_name: editForm.referrer_name || null,
+        next_step: editForm.next_step || null,
+        notes: editForm.notes || null,
+      },
+    });
+    onCancelEdit();
+
+    // Then sync with server
     startTransition(async () => {
       await updateLead(lead.id, editForm);
-      onCancelEdit();
     });
   };
 
   const handleDelete = () => {
+    // Update UI immediately
+    onOptimisticUpdate({ type: "delete_lead", leadId: lead.id });
+    setShowDeleteConfirm(false);
+    onCancelEdit();
+
+    // Then sync with server
     startTransition(async () => {
       await deleteLead(lead.id);
-      setShowDeleteConfirm(false);
-      onCancelEdit();
     });
   };
 
