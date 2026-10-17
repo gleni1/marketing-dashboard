@@ -53,6 +53,13 @@ function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short" });
 }
 
+// Default shared cost categories
+const defaultSharedCostCategories = [
+  { name: "Software (GHL, call tracking)", how: "Monthly subscriptions" },
+  { name: "Estimate time", how: "Hours on estimates × $75/hr" },
+  { name: "Gas & mileage for estimates", how: "Estimate trips only" },
+];
+
 export function SpendView() {
   // Fetch data using SWR (cached across navigations)
   const { data: channels = [], isLoading: channelsLoading } = useChannels();
@@ -61,35 +68,26 @@ export function SpendView() {
 
   const isLoading = channelsLoading || spendLoading || sharedCostsLoading;
 
-  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
-  if (isLoading && channels.length === 0) {
-    return <PageSkeleton />;
-  }
-
+  // All hooks must be called before any conditional returns (React rules of hooks)
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
   const [periodOffset, setPeriodOffset] = useState(0);
+  const [spendData, setSpendData] = useState<Record<string, Record<string, number>>>({});
+  const [sharedData, setSharedData] = useState<Array<{ name: string; how: string; values: Record<string, number> }>>([]);
 
   const { months, label: monthsLabel } = getMonthsRange(periodOffset);
 
-  // Default shared cost categories
-  const defaultSharedCosts = [
-    { name: "Software (GHL, call tracking)", how: "Monthly subscriptions" },
-    { name: "Estimate time", how: "Hours on estimates × $75/hr" },
-    { name: "Gas & mileage for estimates", how: "Estimate trips only" },
-  ];
-
   // Helper to build spend data for current months
-  const buildSpendData = (currentMonths: Date[]) => {
+  const buildSpendData = (currentMonths: Date[], currentChannels: typeof channels, currentSpend: typeof spend) => {
     const data: Record<string, Record<string, number>> = {};
-    channels.forEach((ch) => {
+    currentChannels.forEach((ch) => {
       data[ch.id] = {};
       currentMonths.forEach((m) => {
         const monthKey = formatMonthKey(m);
-        const existing = spend.find(
+        const existing = currentSpend.find(
           (s) => s.channel_id === ch.id && s.month === monthKey
         );
         data[ch.id][monthKey] = existing?.amount || 0;
@@ -99,12 +97,12 @@ export function SpendView() {
   };
 
   // Helper to build shared costs data for current months
-  const buildSharedData = (currentMonths: Date[]) => {
-    return defaultSharedCosts.map((sc) => {
+  const buildSharedData = (currentMonths: Date[], currentSharedCosts: typeof sharedCosts) => {
+    return defaultSharedCostCategories.map((sc) => {
       const values: Record<string, number> = {};
       currentMonths.forEach((m) => {
         const monthKey = formatMonthKey(m);
-        const existing = sharedCosts.find(
+        const existing = currentSharedCosts.find(
           (c) => c.name === sc.name && c.month === monthKey
         );
         values[monthKey] = existing?.amount || 0;
@@ -113,17 +111,19 @@ export function SpendView() {
     });
   };
 
-  // Track edits in state
-  const [spendData, setSpendData] = useState(() => buildSpendData(months));
-  const [sharedData, setSharedData] = useState(() => buildSharedData(months));
-
-  // Reset data when period changes
+  // Initialize and update data when channels/spend/sharedCosts change or period changes
   useEffect(() => {
-    const newMonths = getMonthsRange(periodOffset).months;
-    setSpendData(buildSpendData(newMonths));
-    setSharedData(buildSharedData(newMonths));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodOffset]);
+    if (channels.length > 0) {
+      const newMonths = getMonthsRange(periodOffset).months;
+      setSpendData(buildSpendData(newMonths, channels, spend));
+      setSharedData(buildSharedData(newMonths, sharedCosts));
+    }
+  }, [periodOffset, channels, spend, sharedCosts]);
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && channels.length === 0) {
+    return <PageSkeleton />;
+  }
 
   const handleSpendChange = (
     channelId: string,

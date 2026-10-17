@@ -73,13 +73,7 @@ export function LeadsView() {
 
   const isLoading = leadsLoading || channelsLoading || servicesLoading || lostReasonsLoading;
 
-  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
-  if (isLoading && leads.length === 0) {
-    return <PageSkeleton />;
-  }
-
-  // Find duplicates (leads with duplicate_of set)
-  const duplicates = leads.filter((l) => l.duplicate_of);
+  // All hooks must be called before any conditional returns (React rules of hooks)
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -125,6 +119,14 @@ export function LeadsView() {
     notes: "",
     created_at: today,
   });
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && leads.length === 0) {
+    return <PageSkeleton />;
+  }
+
+  // Find duplicates (leads with duplicate_of set)
+  const duplicates = leads.filter((l) => l.duplicate_of);
 
   // Stage counts (use optimistic leads for instant feedback)
   const stageCounts = optimisticLeads.reduce(

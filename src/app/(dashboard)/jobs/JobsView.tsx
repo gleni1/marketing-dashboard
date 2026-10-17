@@ -51,11 +51,7 @@ export function JobsView({ prefillLeadId }: JobsViewProps) {
 
   const isLoading = jobsLoading || channelsLoading || servicesLoading;
 
-  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
-  if (isLoading && jobs.length === 0) {
-    return <PageSkeleton />;
-  }
-
+  // All hooks must be called before any conditional returns (React rules of hooks)
   const [isPending, startTransition] = useTransition();
   const [showAddForm, setShowAddForm] = useState(!!prefillLeadId);
   const [searchQuery, setSearchQuery] = useState("");
@@ -99,6 +95,11 @@ export function JobsView({ prefillLeadId }: JobsViewProps) {
       });
     }
   }, [prefillFromLead]);
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && jobs.length === 0) {
+    return <PageSkeleton />;
+  }
 
   // Calculate stats
   const totalJobs = jobs.length;
