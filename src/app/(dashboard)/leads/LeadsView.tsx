@@ -10,6 +10,14 @@ import {
   updateLead,
   deleteLead,
 } from "./actions";
+import {
+  useLeads,
+  useChannels,
+  useServices,
+  useLostReasons,
+  invalidateLeads,
+} from "@/lib/swr/hooks";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type LeadWithRelations = Lead & {
   channel: { id: string; name: string } | null;
@@ -17,14 +25,6 @@ type LeadWithRelations = Lead & {
   lost_reason: { id: string; name: string } | null;
   jobs: { id: string }[];
 };
-
-interface LeadsViewProps {
-  leads: LeadWithRelations[];
-  channels: Channel[];
-  services: Service[];
-  lostReasons: LostReason[];
-  duplicates: LeadWithRelations[];
-}
 
 const STAGES: { value: LeadStage; label: string }[] = [
   { value: "new", label: "New" },
@@ -64,13 +64,22 @@ type OptimisticAction =
   | { type: "delete_lead"; leadId: string }
   | { type: "add_lead"; lead: LeadWithRelations };
 
-export function LeadsView({
-  leads,
-  channels,
-  services,
-  lostReasons,
-  duplicates,
-}: LeadsViewProps) {
+export function LeadsView() {
+  // Fetch data using SWR (cached across navigations)
+  const { data: leads = [], isLoading: leadsLoading, mutate: mutateLeads } = useLeads();
+  const { data: channels = [], isLoading: channelsLoading } = useChannels();
+  const { data: services = [], isLoading: servicesLoading } = useServices();
+  const { data: lostReasons = [], isLoading: lostReasonsLoading } = useLostReasons();
+
+  const isLoading = leadsLoading || channelsLoading || servicesLoading || lostReasonsLoading;
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && leads.length === 0) {
+    return <PageSkeleton />;
+  }
+
+  // Find duplicates (leads with duplicate_of set)
+  const duplicates = leads.filter((l) => l.duplicate_of);
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showAddForm, setShowAddForm] = useState(false);
@@ -183,13 +192,14 @@ export function LeadsView({
       created_at: today,
     });
 
-    // Then sync with server
+    // Then sync with server and refresh cache
     startTransition(async () => {
       await createLead({
         ...formData,
         service_id: formData.service_id || null,
         created_at: formData.created_at ? new Date(formData.created_at).toISOString() : undefined,
       });
+      mutateLeads(); // Refresh SWR cache
     });
   };
 
@@ -201,9 +211,10 @@ export function LeadsView({
     // Update UI immediately
     updateOptimisticLeads({ type: "update_stage", leadId, stage: newStage, lostReasonId });
 
-    // Then sync with server
+    // Then sync with server and refresh cache
     startTransition(async () => {
       const result = await changeLeadStage(leadId, newStage, lostReasonId);
+      mutateLeads(); // Refresh SWR cache
       if (result.success && result.showJobForm) {
         router.push(`/jobs?from_lead=${leadId}`);
       }
@@ -216,6 +227,7 @@ export function LeadsView({
   ) => {
     startTransition(async () => {
       await resolveDuplicate(leadId, action);
+      mutateLeads(); // Refresh SWR cache
     });
   };
 
@@ -514,6 +526,7 @@ export function LeadsView({
                   channels={channels}
                   services={services}
                   onOptimisticUpdate={updateOptimisticLeads}
+                  onMutate={mutateLeads}
                 />
               ))}
             </tbody>
@@ -572,6 +585,7 @@ function LeadRow({
   channels,
   services,
   onOptimisticUpdate,
+  onMutate,
 }: {
   lead: LeadWithRelations;
   lostReasons: LostReason[];
@@ -586,6 +600,7 @@ function LeadRow({
   channels: Channel[];
   services: Service[];
   onOptimisticUpdate: (action: OptimisticAction) => void;
+  onMutate: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [selectedStage, setSelectedStage] = useState<LeadStage>(lead.stage);
@@ -640,12 +655,13 @@ function LeadRow({
     });
     onCancelEdit();
 
-    // Then sync with server
+    // Then sync with server and refresh cache
     startTransition(async () => {
       await updateLead(lead.id, {
         ...editForm,
         created_at: editForm.created_at || undefined,
       });
+      onMutate(); // Refresh SWR cache
     });
   };
 
@@ -655,9 +671,10 @@ function LeadRow({
     setShowDeleteConfirm(false);
     onCancelEdit();
 
-    // Then sync with server
+    // Then sync with server and refresh cache
     startTransition(async () => {
       await deleteLead(lead.id);
+      onMutate(); // Refresh SWR cache
     });
   };
 

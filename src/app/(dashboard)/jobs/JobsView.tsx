@@ -3,6 +3,8 @@
 import { useState, useTransition, useEffect } from "react";
 import type { Job, Channel, Service, Lead, JobStatus } from "@/lib/types";
 import { createJob, updateJob, updateJobCostProfit, deleteJob } from "./actions";
+import { useJobs, useChannels, useServices, useLead } from "@/lib/swr/hooks";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type JobWithRelations = Job & {
   channel: { id: string; name: string } | null;
@@ -11,10 +13,7 @@ type JobWithRelations = Job & {
 };
 
 interface JobsViewProps {
-  jobs: JobWithRelations[];
-  channels: Channel[];
-  services: Service[];
-  prefillFromLead: Lead | null;
+  prefillLeadId: string | null;
 }
 
 const JOB_STATUSES: { value: JobStatus; label: string }[] = [
@@ -43,14 +42,22 @@ function getTodayISO(): string {
   return new Date().toISOString().split("T")[0];
 }
 
-export function JobsView({
-  jobs,
-  channels,
-  services,
-  prefillFromLead,
-}: JobsViewProps) {
+export function JobsView({ prefillLeadId }: JobsViewProps) {
+  // Fetch data using SWR (cached across navigations)
+  const { data: jobs = [], isLoading: jobsLoading, mutate: mutateJobs } = useJobs();
+  const { data: channels = [], isLoading: channelsLoading } = useChannels();
+  const { data: services = [], isLoading: servicesLoading } = useServices();
+  const { data: prefillFromLead } = useLead(prefillLeadId);
+
+  const isLoading = jobsLoading || channelsLoading || servicesLoading;
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && jobs.length === 0) {
+    return <PageSkeleton />;
+  }
+
   const [isPending, startTransition] = useTransition();
-  const [showAddForm, setShowAddForm] = useState(!!prefillFromLead);
+  const [showAddForm, setShowAddForm] = useState(!!prefillLeadId);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterChannel, setFilterChannel] = useState("");
   const [filterService, setFilterService] = useState("");
@@ -156,6 +163,7 @@ export function JobsView({
       });
 
       if (result.success) {
+        mutateJobs(); // Refresh SWR cache
         if (addAnother) {
           setFormData({
             lead_id: null,
@@ -569,6 +577,7 @@ export function JobsView({
                   job={job}
                   channels={channels}
                   services={services}
+                  onMutate={mutateJobs}
                 />
               ))}
             </tbody>
@@ -596,10 +605,12 @@ function JobRow({
   job,
   channels,
   services,
+  onMutate,
 }: {
   job: JobWithRelations;
   channels: Channel[];
   services: Service[];
+  onMutate: () => void;
 }) {
   const [isPending, startTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(false);
@@ -636,6 +647,7 @@ function JobRow({
     if (newCost !== job.job_cost) {
       startTransition(async () => {
         await updateJobCostProfit(job.id, "job_cost", newCost, job.sold_amount);
+        onMutate(); // Refresh SWR cache
       });
     }
   };
@@ -650,6 +662,7 @@ function JobRow({
           newProfit,
           job.sold_amount
         );
+        onMutate(); // Refresh SWR cache
       });
     }
   };
@@ -688,6 +701,7 @@ function JobRow({
         gross_profit: parseCurrency(editData.gross_profit),
         notes: editData.notes,
       });
+      onMutate(); // Refresh SWR cache
       setIsEditing(false);
     });
   };
@@ -695,6 +709,7 @@ function JobRow({
   const handleDelete = () => {
     startTransition(async () => {
       await deleteJob(job.id);
+      onMutate(); // Refresh SWR cache
       setShowDeleteConfirm(false);
     });
   };

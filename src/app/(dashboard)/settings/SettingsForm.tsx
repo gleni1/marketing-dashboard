@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import type {
   Channel,
   Service,
@@ -16,13 +16,17 @@ import {
   saveLostReasons,
   saveSettings,
 } from "./actions";
-
-interface SettingsFormProps {
-  initialChannels: Channel[];
-  initialServices: Service[];
-  initialLostReasons: LostReason[];
-  initialSettings: Settings | null;
-}
+import {
+  useChannels,
+  useServices,
+  useLostReasons,
+  useSettings,
+  invalidateChannels,
+  invalidateServices,
+  invalidateLostReasons,
+  invalidateSettings,
+} from "@/lib/swr/hooks";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 type ChannelFormData = {
   id?: string;
@@ -119,12 +123,16 @@ const spendSourceOptions: { value: ChannelSpendSource; label: string }[] = [
   { value: "none", label: "No spend" },
 ];
 
-export function SettingsForm({
-  initialChannels,
-  initialServices,
-  initialLostReasons,
-  initialSettings,
-}: SettingsFormProps) {
+export function SettingsForm() {
+  // Fetch data using SWR (cached across navigations) - use "all" to get inactive too
+  const { data: fetchedChannels = [], isLoading: channelsLoading } = useChannels(false);
+  const { data: fetchedServices = [], isLoading: servicesLoading } = useServices(false);
+  const { data: fetchedLostReasons = [], isLoading: lostReasonsLoading } = useLostReasons(false);
+  const { data: fetchedSettings, isLoading: settingsLoading } = useSettings();
+
+  const isLoading = channelsLoading || servicesLoading || lostReasonsLoading || settingsLoading;
+  const [isInitialized, setIsInitialized] = useState(false);
+
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -132,43 +140,57 @@ export function SettingsForm({
   } | null>(null);
 
   // Channels state
-  const [channels, setChannels] = useState<ChannelFormData[]>(
-    initialChannels.map((c) => ({
-      id: c.id,
-      name: c.name,
-      spend_source: c.spend_source,
-      active: c.active,
-      sort_order: c.sort_order,
-    }))
-  );
+  const [channels, setChannels] = useState<ChannelFormData[]>([]);
 
   // Services state
-  const [services, setServices] = useState<ServiceFormData[]>(
-    initialServices.map((s) => ({
-      id: s.id,
-      name: s.name,
-      sort_order: s.sort_order,
-    }))
-  );
+  const [services, setServices] = useState<ServiceFormData[]>([]);
 
   // Lost reasons state
-  const [lostReasons, setLostReasons] = useState<LostReasonFormData[]>(
-    initialLostReasons.map((r) => ({
-      id: r.id,
-      name: r.name,
-    }))
-  );
+  const [lostReasons, setLostReasons] = useState<LostReasonFormData[]>([]);
 
   // Settings state
-  const [hourlyRate, setHourlyRate] = useState(
-    initialSettings?.hourly_rate ?? 75
-  );
-  const [sharedCostMode, setSharedCostMode] = useState<SharedCostMode>(
-    initialSettings?.shared_cost_mode ?? "overall_cac_only"
-  );
-  const [targets, setTargets] = useState<Targets>(
-    initialSettings?.targets ?? defaultTargets
-  );
+  const [hourlyRate, setHourlyRate] = useState(75);
+  const [sharedCostMode, setSharedCostMode] = useState<SharedCostMode>("overall_cac_only");
+  const [targets, setTargets] = useState<Targets>(defaultTargets);
+
+  // Initialize form state from fetched data (only once)
+  useEffect(() => {
+    if (!isInitialized && !isLoading) {
+      setChannels(
+        fetchedChannels.map((c) => ({
+          id: c.id,
+          name: c.name,
+          spend_source: c.spend_source,
+          active: c.active,
+          sort_order: c.sort_order,
+        }))
+      );
+      setServices(
+        fetchedServices.map((s) => ({
+          id: s.id,
+          name: s.name,
+          sort_order: s.sort_order,
+        }))
+      );
+      setLostReasons(
+        fetchedLostReasons.map((r) => ({
+          id: r.id,
+          name: r.name,
+        }))
+      );
+      if (fetchedSettings) {
+        setHourlyRate(fetchedSettings.hourly_rate);
+        setSharedCostMode(fetchedSettings.shared_cost_mode);
+        setTargets(fetchedSettings.targets);
+      }
+      setIsInitialized(true);
+    }
+  }, [isLoading, isInitialized, fetchedChannels, fetchedServices, fetchedLostReasons, fetchedSettings]);
+
+  // Show skeleton while loading (only on first load)
+  if (isLoading && !isInitialized) {
+    return <PageSkeleton />;
+  }
 
   const handleSave = () => {
     setMessage(null);
@@ -195,6 +217,11 @@ export function SettingsForm({
       if (error) {
         setMessage({ type: "error", text: error });
       } else {
+        // Refresh SWR cache
+        invalidateChannels();
+        invalidateServices();
+        invalidateLostReasons();
+        invalidateSettings();
         setMessage({ type: "success", text: "Settings saved!" });
         setTimeout(() => setMessage(null), 3000);
       }

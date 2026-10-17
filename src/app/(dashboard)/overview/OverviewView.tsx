@@ -1,63 +1,20 @@
 "use client";
 
 import Link from "next/link";
-
-interface KpiData {
-  label: string;
-  value: number | null;
-  format: "currency" | "number" | "percent";
-  target?: number;
-  targetDirection?: "under" | "atleast";
-  basis: string;
-}
-
-interface FunnelData {
-  stage: string;
-  count: number;
-  rate: number | null;
-  target?: number;
-  isFirst?: boolean;
-  hint: string;
-}
-
-interface ChannelMetric {
-  id: string;
-  name: string;
-  leads: number;
-  junk: number;
-  sold: number;
-  spend: number;
-  jobs: number;
-  revenue: number;
-  cpl: number | null;
-  junkPct: number;
-  closeRate: number;
-  cac: number | null;
-  roas: number | null;
-}
-
-interface Totals {
-  spend: number;
-  leads: number;
-  cpl: number | null;
-  junkPct: number;
-  sold: number;
-  closeRate: number;
-  revenue: number;
-  cac: number | null;
-  roas: number | null;
-}
-
-type Period = "this-month" | "last-30" | "quarter" | "ytd";
+import { useOverviewData } from "@/lib/swr/hooks";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import {
+  type Period,
+  type KpiData,
+  type FunnelData,
+  type ChannelMetric,
+  type Totals,
+  getDateRange,
+  calculateOverviewMetrics,
+} from "./calculations";
 
 interface OverviewViewProps {
-  monthLabel: string;
   period: Period;
-  kpiData: KpiData[];
-  funnelData: FunnelData[];
-  channelMetrics: ChannelMetric[];
-  alerts: string[];
-  totals: Totals;
 }
 
 function formatCurrency(value: number | null): string {
@@ -101,15 +58,38 @@ const periodOptions: { value: Period; label: string }[] = [
   { value: "ytd", label: "YTD" },
 ];
 
-export function OverviewView({
-  monthLabel,
-  period,
-  kpiData,
-  funnelData,
-  channelMetrics,
-  alerts,
-  totals,
-}: OverviewViewProps) {
+export function OverviewView({ period }: OverviewViewProps) {
+  // Get date range for the period
+  const dateRange = getDateRange(period);
+  const { start, end, label: monthLabel, spendMonths } = dateRange;
+
+  // Fetch data using SWR (cached across navigations)
+  const { data, isLoading } = useOverviewData({ start, end, spendMonths });
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && !data) {
+    return <PageSkeleton />;
+  }
+
+  // Calculate metrics from raw data
+  const {
+    settings,
+    channels,
+    leads,
+    jobs,
+    spend,
+    stageHistory,
+  } = data || { settings: null, channels: [], leads: [], jobs: [], spend: [], stageHistory: [] };
+
+  const { kpiData, funnelData, channelMetrics, alerts, totals } = calculateOverviewMetrics(
+    settings,
+    channels,
+    leads,
+    jobs,
+    spend,
+    stageHistory
+  );
+
   return (
     <>
       {/* Header */}

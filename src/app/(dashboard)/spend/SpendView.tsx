@@ -3,12 +3,8 @@
 import { useState, useTransition, useEffect } from "react";
 import type { Channel, Spend, SharedCost } from "@/lib/types";
 import { saveSpend, saveSharedCosts } from "./actions";
-
-interface SpendViewProps {
-  channels: Channel[];
-  spend: Spend[];
-  sharedCosts: SharedCost[];
-}
+import { useChannels, useSpend, useSharedCosts } from "@/lib/swr/hooks";
+import { PageSkeleton } from "@/components/PageSkeleton";
 
 function formatCurrency(amount: number): string {
   return "$" + amount.toLocaleString("en-US", { maximumFractionDigits: 0 });
@@ -57,7 +53,19 @@ function formatMonthLabel(date: Date): string {
   return date.toLocaleDateString("en-US", { month: "short" });
 }
 
-export function SpendView({ channels, spend, sharedCosts }: SpendViewProps) {
+export function SpendView() {
+  // Fetch data using SWR (cached across navigations)
+  const { data: channels = [], isLoading: channelsLoading } = useChannels();
+  const { data: spend = [], isLoading: spendLoading, mutate: mutateSpend } = useSpend();
+  const { data: sharedCosts = [], isLoading: sharedCostsLoading, mutate: mutateSharedCosts } = useSharedCosts();
+
+  const isLoading = channelsLoading || spendLoading || sharedCostsLoading;
+
+  // Show skeleton while loading (only on first load - SWR will show cached data on subsequent visits)
+  if (isLoading && channels.length === 0) {
+    return <PageSkeleton />;
+  }
+
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -194,6 +202,9 @@ export function SpendView({ channels, spend, sharedCosts }: SpendViewProps) {
           text: spendResult.error || sharedResult.error || "Error saving",
         });
       } else {
+        // Refresh SWR cache
+        mutateSpend();
+        mutateSharedCosts();
         setMessage({ type: "success", text: "Changes saved!" });
         setTimeout(() => setMessage(null), 3000);
       }
