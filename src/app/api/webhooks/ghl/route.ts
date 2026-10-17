@@ -173,6 +173,24 @@ export async function POST(request: NextRequest) {
 
     const channelId = channels ? mapToChannel(payload.utm_source, payload.source, channels) : null;
 
+    // Map service name to service_id
+    let serviceId: string | null = null;
+    if (payload.service) {
+      const serviceName = payload.service.toLowerCase().trim();
+      const { data: services } = await supabase
+        .from("services")
+        .select("id, name")
+        .eq("user_id", userId)
+        .eq("active", true);
+
+      if (services) {
+        const match = services.find(s => s.name.toLowerCase().trim() === serviceName);
+        if (match) {
+          serviceId = match.id;
+        }
+      }
+    }
+
     // Check for duplicate phone
     let duplicateOf: string | null = null;
     if (phoneNormalized) {
@@ -208,6 +226,7 @@ export async function POST(request: NextRequest) {
         phone_normalized: phoneNormalized || null,
         town: town || null,
         channel_id: channelId,
+        service_id: serviceId,
         stage: "new",
         duplicate_of: duplicateOf,
         notes: notes.length > 0 ? notes.join(" | ") : null,
@@ -242,6 +261,7 @@ export async function POST(request: NextRequest) {
       message: "Lead created",
       lead_id: newLead.id,
       channel_matched: !!channelId,
+      service_matched: !!serviceId,
       duplicate_phone: !!duplicateOf,
     });
 
