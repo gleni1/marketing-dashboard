@@ -99,6 +99,7 @@ export async function updateLead(
     referrer_name?: string;
     next_step?: string;
     notes?: string;
+    created_at?: string; // Date string (YYYY-MM-DD)
   }
 ) {
   const supabase = await createClient();
@@ -143,6 +144,11 @@ export async function updateLead(
   }
   if (formData.notes !== undefined) {
     updates.notes = formData.notes || null;
+  }
+  if (formData.created_at !== undefined) {
+    // Convert date string to ISO timestamp
+    updates.created_at = new Date(formData.created_at).toISOString();
+    editedFields.add("created_at");
   }
 
   updates.edited_fields = Array.from(editedFields);

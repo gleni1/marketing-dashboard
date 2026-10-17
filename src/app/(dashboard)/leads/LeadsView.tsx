@@ -602,6 +602,7 @@ function LeadRow({
     referrer_name: lead.referrer_name || "",
     next_step: lead.next_step || "",
     notes: lead.notes || "",
+    created_at: lead.created_at ? new Date(lead.created_at).toISOString().split("T")[0] : "",
   });
 
   const handleStageSelect = (newStage: LeadStage) => {
@@ -634,13 +635,17 @@ function LeadRow({
         referrer_name: editForm.referrer_name || null,
         next_step: editForm.next_step || null,
         notes: editForm.notes || null,
+        created_at: editForm.created_at ? new Date(editForm.created_at).toISOString() : lead.created_at,
       },
     });
     onCancelEdit();
 
     // Then sync with server
     startTransition(async () => {
-      await updateLead(lead.id, editForm);
+      await updateLead(lead.id, {
+        ...editForm,
+        created_at: editForm.created_at || undefined,
+      });
     });
   };
 
@@ -748,6 +753,17 @@ function LeadRow({
                 value={editForm.next_step}
                 onChange={(e) =>
                   setEditForm({ ...editForm, next_step: e.target.value })
+                }
+                className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-semibold text-[#3D4248]">
+              Date received
+              <input
+                type="date"
+                value={editForm.created_at}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, created_at: e.target.value })
                 }
                 className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
               />
