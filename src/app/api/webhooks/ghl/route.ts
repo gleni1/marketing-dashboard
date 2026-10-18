@@ -75,6 +75,9 @@ function mapToChannel(
     if (sourceToMatch.includes("referral") && name.includes("referral")) {
       return channel.id;
     }
+    if (sourceToMatch.includes("seo") && name.toLowerCase().includes("seo")) {
+      return channel.id;
+    }
   }
 
   return null;
