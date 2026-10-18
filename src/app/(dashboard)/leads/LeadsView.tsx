@@ -82,6 +82,8 @@ export function LeadsView() {
   const [filterChannel, setFilterChannel] = useState<string>("");
   const [filterService, setFilterService] = useState<string>("");
   const [editingLeadId, setEditingLeadId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const LEADS_PER_PAGE = 10;
 
   // Optimistic state for instant UI updates
   const [optimisticLeads, updateOptimisticLeads] = useOptimistic(
@@ -151,6 +153,14 @@ export function LeadsView() {
     }
     return true;
   });
+
+  // Pagination
+  const totalPages = Math.ceil(filteredLeads.length / LEADS_PER_PAGE);
+  const startIndex = (currentPage - 1) * LEADS_PER_PAGE;
+  const paginatedLeads = filteredLeads.slice(startIndex, startIndex + LEADS_PER_PAGE);
+
+  // Reset to page 1 when filters change
+  const resetPagination = () => setCurrentPage(1);
 
   const handleAddLead = () => {
     // Create optimistic lead for instant UI update
@@ -427,7 +437,7 @@ export function LeadsView() {
               <input
                 type="search"
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { setSearchQuery(e.target.value); resetPagination(); }}
                 placeholder="Name, phone or town"
                 className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] w-[200px] border border-border-dark rounded-lg bg-white"
               />
@@ -436,7 +446,7 @@ export function LeadsView() {
               Channel
               <select
                 value={filterChannel}
-                onChange={(e) => setFilterChannel(e.target.value)}
+                onChange={(e) => { setFilterChannel(e.target.value); resetPagination(); }}
                 className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
               >
                 <option value="">All channels</option>
@@ -451,7 +461,7 @@ export function LeadsView() {
               Service
               <select
                 value={filterService}
-                onChange={(e) => setFilterService(e.target.value)}
+                onChange={(e) => { setFilterService(e.target.value); resetPagination(); }}
                 className="font-normal text-[15px] text-ink px-3 py-2.5 min-h-[44px] border border-border-dark rounded-lg bg-white"
               >
                 <option value="">All services</option>
@@ -469,7 +479,7 @@ export function LeadsView() {
         <div className="flex flex-wrap gap-2" role="group" aria-label="Filter by stage">
           <button
             type="button"
-            onClick={() => setActiveStage("all")}
+            onClick={() => { setActiveStage("all"); resetPagination(); }}
             aria-pressed={activeStage === "all"}
             className={`text-sm font-medium px-3.5 py-2 rounded-full min-h-[44px] border transition-colors ${
               activeStage === "all"
@@ -483,7 +493,7 @@ export function LeadsView() {
             <button
               key={stage.value}
               type="button"
-              onClick={() => setActiveStage(stage.value)}
+              onClick={() => { setActiveStage(stage.value); resetPagination(); }}
               aria-pressed={activeStage === stage.value}
               className={`text-sm font-medium px-3.5 py-2 rounded-full min-h-[44px] border transition-colors ${
                 activeStage === stage.value
@@ -516,7 +526,7 @@ export function LeadsView() {
               </tr>
             </thead>
             <tbody>
-              {filteredLeads.map((lead) => (
+              {paginatedLeads.map((lead) => (
                 <LeadRow
                   key={lead.id}
                   lead={lead}
@@ -534,6 +544,36 @@ export function LeadsView() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {filteredLeads.length > LEADS_PER_PAGE && (
+          <div className="flex items-center justify-between pt-2">
+            <span className="text-sm text-muted">
+              Showing {startIndex + 1}–{Math.min(startIndex + LEADS_PER_PAGE, filteredLeads.length)} of {filteredLeads.length} leads
+            </span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-4 py-2 min-h-[44px] text-sm font-semibold border border-border-dark rounded-lg bg-white hover:bg-ground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Previous
+              </button>
+              <span className="flex items-center px-3 text-sm font-medium">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="px-4 py-2 min-h-[44px] text-sm font-semibold border border-border-dark rounded-lg bg-white hover:bg-ground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
 
         {filteredLeads.length === 0 && (
           <p className="text-center text-muted py-8">
