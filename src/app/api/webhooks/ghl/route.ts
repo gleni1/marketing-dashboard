@@ -177,9 +177,11 @@ export async function POST(request: NextRequest) {
     const channelId = channels ? mapToChannel(payload.utm_source, payload.source, channels) : null;
 
     // Map service name to service_id
+    // Check both 'service' and GHL's custom field name
+    const serviceValue = payload.service || payload["Multi Dropdown 390 R"];
     let serviceId: string | null = null;
-    if (payload.service) {
-      const serviceName = payload.service.toLowerCase().trim();
+    if (serviceValue) {
+      const serviceName = String(serviceValue).toLowerCase().trim();
       const { data: services } = await supabase
         .from("services")
         .select("id, name")
@@ -214,7 +216,7 @@ export async function POST(request: NextRequest) {
     const notes: string[] = [];
     if (payload.utm_source) notes.push(`UTM: ${payload.utm_source}`);
     if (payload.source) notes.push(`Source: ${payload.source}`);
-    if (payload.service) notes.push(`Service: ${payload.service}`);
+    if (serviceValue) notes.push(`Service: ${serviceValue}`);
     if (payload.pipeline) notes.push(`Pipeline: ${payload.pipeline}`);
 
     // Create lead
