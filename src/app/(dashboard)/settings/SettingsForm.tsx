@@ -15,6 +15,9 @@ import {
   saveServices,
   saveLostReasons,
   saveSettings,
+  deleteChannel,
+  deleteService,
+  deleteLostReason,
 } from "./actions";
 import {
   useChannels,
@@ -250,6 +253,25 @@ export function SettingsForm() {
     );
   };
 
+  const removeChannel = (index: number) => {
+    const channel = channels[index];
+    // If it has an ID, delete from database
+    if (channel.id) {
+      startTransition(async () => {
+        const result = await deleteChannel(channel.id!);
+        if (result.error) {
+          setMessage({ type: "error", text: result.error });
+        } else {
+          setChannels(channels.filter((_, i) => i !== index));
+          invalidateChannels();
+        }
+      });
+    } else {
+      // New channel, just remove from state
+      setChannels(channels.filter((_, i) => i !== index));
+    }
+  };
+
   // Service handlers
   const addService = () => {
     setServices([
@@ -264,6 +286,23 @@ export function SettingsForm() {
     );
   };
 
+  const removeService = (index: number) => {
+    const service = services[index];
+    if (service.id) {
+      startTransition(async () => {
+        const result = await deleteService(service.id!);
+        if (result.error) {
+          setMessage({ type: "error", text: result.error });
+        } else {
+          setServices(services.filter((_, i) => i !== index));
+          invalidateServices();
+        }
+      });
+    } else {
+      setServices(services.filter((_, i) => i !== index));
+    }
+  };
+
   // Lost reason handlers
   const addLostReason = () => {
     setLostReasons([...lostReasons, { name: "" }]);
@@ -273,6 +312,23 @@ export function SettingsForm() {
     setLostReasons(
       lostReasons.map((r, i) => (i === index ? { ...r, name } : r))
     );
+  };
+
+  const removeLostReason = (index: number) => {
+    const reason = lostReasons[index];
+    if (reason.id) {
+      startTransition(async () => {
+        const result = await deleteLostReason(reason.id!);
+        if (result.error) {
+          setMessage({ type: "error", text: result.error });
+        } else {
+          setLostReasons(lostReasons.filter((_, i) => i !== index));
+          invalidateLostReasons();
+        }
+      });
+    } else {
+      setLostReasons(lostReasons.filter((_, i) => i !== index));
+    }
   };
 
   // Target handlers
@@ -334,6 +390,7 @@ export function SettingsForm() {
                     <th className="px-3 py-2.5 border-b-2 border-ink">Name</th>
                     <th className="px-3 py-2.5 border-b-2 border-ink">Spend</th>
                     <th className="px-3 py-2.5 border-b-2 border-ink">Active</th>
+                    <th className="px-3 py-2.5 border-b-2 border-ink w-[60px]"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -380,6 +437,17 @@ export function SettingsForm() {
                           />
                           <span>On</span>
                         </label>
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => removeChannel(index)}
+                          disabled={isPending}
+                          className="text-muted hover:text-below-target min-h-[44px] px-2 transition-colors disabled:opacity-50"
+                          title="Delete channel"
+                        >
+                          ✕
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -460,14 +528,24 @@ export function SettingsForm() {
 
             <div className="flex flex-col gap-3">
               {services.map((service, index) => (
-                <input
-                  key={service.id ?? `new-${index}`}
-                  type="text"
-                  value={service.name}
-                  onChange={(e) => updateService(index, e.target.value)}
-                  aria-label="Service name"
-                  className="w-full px-3 py-2.5 border border-border-dark rounded-lg bg-white text-ink min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent"
-                />
+                <div key={service.id ?? `new-${index}`} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={service.name}
+                    onChange={(e) => updateService(index, e.target.value)}
+                    aria-label="Service name"
+                    className="flex-1 px-3 py-2.5 border border-border-dark rounded-lg bg-white text-ink min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeService(index)}
+                    disabled={isPending}
+                    className="text-muted hover:text-below-target min-h-[44px] px-2 transition-colors disabled:opacity-50"
+                    title="Delete service"
+                  >
+                    ✕
+                  </button>
+                </div>
               ))}
             </div>
 
@@ -491,14 +569,24 @@ export function SettingsForm() {
 
             <div className="flex flex-col gap-3">
               {lostReasons.map((reason, index) => (
-                <input
-                  key={reason.id ?? `new-${index}`}
-                  type="text"
-                  value={reason.name}
-                  onChange={(e) => updateLostReason(index, e.target.value)}
-                  aria-label="Lost reason"
-                  className="w-full px-3 py-2.5 border border-border-dark rounded-lg bg-white text-ink min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent"
-                />
+                <div key={reason.id ?? `new-${index}`} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={reason.name}
+                    onChange={(e) => updateLostReason(index, e.target.value)}
+                    aria-label="Lost reason"
+                    className="flex-1 px-3 py-2.5 border border-border-dark rounded-lg bg-white text-ink min-h-[44px] focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeLostReason(index)}
+                    disabled={isPending}
+                    className="text-muted hover:text-below-target min-h-[44px] px-2 transition-colors disabled:opacity-50"
+                    title="Delete reason"
+                  >
+                    ✕
+                  </button>
+                </div>
               ))}
             </div>
 
