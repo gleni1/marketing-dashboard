@@ -189,7 +189,14 @@ export async function POST(request: NextRequest) {
         .eq("active", true);
 
       if (services) {
-        const match = services.find(s => s.name.toLowerCase().trim() === serviceName);
+        // Try exact match first
+        let match = services.find(s => s.name.toLowerCase().trim() === serviceName);
+
+        // If no match and service is "roofing", default to "Roof replacement"
+        if (!match && serviceName === "roofing") {
+          match = services.find(s => s.name.toLowerCase().trim() === "roof replacement");
+        }
+
         if (match) {
           serviceId = match.id;
         }
