@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { ResponseCookie } from "next/dist/compiled/@edge-runtime/cookies";
+import { isEmailAllowed } from "@/lib/auth";
 
 type CookieToSet = {
   name: string;
@@ -62,6 +63,16 @@ export async function updateSession(request: NextRequest) {
   if (hasAuthCode && !request.nextUrl.pathname.startsWith("/auth")) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
+  // Check if logged-in user's email is allowed
+  if (user && !isEmailAllowed(user.email || "")) {
+    // Unauthorized email - sign out and redirect to login
+    await supabase.auth.signOut();
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("error", "Unauthorized email");
     return NextResponse.redirect(url);
   }
 
